@@ -3,7 +3,8 @@ import java.lang.Thread;
 import java.util.Random;
 
 public class Game {
-    public static PixelColor[][] grid; // The game is represented by a grid of a certain size
+    public static int gridWidth, gridHeight;
+    //public static PixelColor[][] grid; // The game is represented by a grid of a certain size
     public static enum PixelColor {NONE, PINK, BLUE, YELLOW, GREEN, RED} // Pixel color enum
     public static ArrayList<Brick> bricks = new ArrayList<>();
     public static ArrayList<Pixel> pixelList = new ArrayList<>();
@@ -16,7 +17,8 @@ public class Game {
     // Main
     public static void main(String[] args) {
         initGrid(16, 30);
-        newBrick(random.nextInt(5), 7, 1);
+        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
+        newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
 
         BrickFallUpdate t = new BrickFallUpdate();
         t.start();
@@ -26,12 +28,14 @@ public class Game {
 
     // Initializes the grid
     public static void initGrid(int width, int height) {
-        grid = new PixelColor[height][width];
+        gridWidth = width;
+        gridHeight = height;
+        /*grid = new PixelColor[height][width];
         for(int i = 0; i < height; i++) {
             for(int j = 0; j < width; j++) {
                 grid[i][j] = PixelColor.NONE;
             }
-        }
+        }*/
     }
 
     // Returns a new brick instance
@@ -65,7 +69,7 @@ public class Game {
             this.y = y;
             this.pixelColor = color;
             this.ID = generateID();
-            grid[y][x] = this.pixelColor;
+            //grid[y][x] = this.pixelColor;
             pixelList.add(this);
         }
 
@@ -89,15 +93,13 @@ public class Game {
 
         // Set position
         public void setPosition(int newX, int newY) {
-            // The grid is only a graphical representation. Updating Pixel objects will not affect the grid
-            // Therefore, we need to manually clear out or draw new pixels on the grid
-            // This part clears out the pixel at the old position
-            grid[this.y][this.x] = PixelColor.NONE;
-
+            //// The grid is only a graphical representation. Updating Pixel objects will not affect the grid
+            //// Therefore, we need to manually clear out or draw new pixels on the grid
+            //// This part clears out the pixel at the old position
+            //grid[this.y][this.x] = PixelColor.NONE;
             this.x = newX;
             this.y = newY;
-
-            grid[this.y][this.x] = this.pixelColor; // Same story as above, but draws a new pixel at the new position
+            //grid[this.y][this.x] = this.pixelColor; // Same story as above, but draws a new pixel at the new position
         }
 
         /* Utility methods */
@@ -114,7 +116,7 @@ public class Game {
     public static class Brick {
         public Pixel[] pixels; // Container for all pixels which make up the brick
         public boolean falling;
-        public int angle;
+        public int angle = 0;
         public int dx, dy;
         public int modelID;
 
@@ -138,9 +140,11 @@ public class Game {
             for(int i = 0; i < this.pixels.length; i++) {
                 if(this.pixels[i].active) {
                     // Check if a pixel is touching the ground
-                    if(this.pixels[i].getY() >= grid.length-1) {
+                    //if(this.pixels[i].getY() >= grid.length-1) {
+                    if(this.pixels[i].getY() >= gridHeight-1) {
                         this.falling = false;
-                        newBrick(random.nextInt(5), 7, 1);
+                        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
+                        newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
                         this.deactivate();
                     } else {
                         // Check if any pixels are colliding with this pixel
@@ -153,7 +157,8 @@ public class Game {
                                     // Check if the pixel brick IDs DO NOT match
                                     if(!pixelList.get(j).brickID.equals(this.pixels[i].brickID)) {
                                         this.falling = false;
-                                        newBrick(random.nextInt(5), 7, 1);
+                                        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
+                                        newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
                                         this.deactivate();
                                     }
                                 }
@@ -167,7 +172,8 @@ public class Game {
         // Checks if there is free space to the right of the brick
         public boolean spaceToTheRightFree() {
             for(int i = 0; i < this.pixels.length; i++) {
-                if(this.pixels[i].getX() == grid[0].length-1) {
+                //if(this.pixels[i].getX() == grid[0].length-1) {
+                if(this.pixels[i].getX() == gridWidth-1) {
                     return false;
                 }
                 // Check if there is a pixel to the right of this one
@@ -210,10 +216,19 @@ public class Game {
             return true;
         }
 
-        // Rotates the brick 90 degrees to the right
+        // Rotates the brick 90 degrees clockwise
         // Dont ask me how/why it works, I have as much a clue as you
         public void rotate() {
             if(this.falling) {
+                this.angle++;
+                if(this.angle > 3)
+                    this.angle = 0;
+                int newXOffset = 0;
+                int newYOffset = 0;
+                if(this.angle == 1) newXOffset = 1;
+                else if(this.angle == 2) newYOffset = -1;
+                else if(this.angle == 3) newXOffset = -1;
+                else if(this.angle == 0) newYOffset = 1;
                 boolean[][] brickToGrid = new boolean[4][4];
                 for(int i = 0; i < this.pixels.length; i++)
                     for(int j = 0; j < this.pixels.length; j++)
@@ -222,7 +237,7 @@ public class Game {
                     brickToGrid[this.pixels[i].getY()-this.dy][this.pixels[i].getX()-this.dx] = true;
                 }
                 boolean[][] brickToGridTurned = new boolean[4][4];
-                ArrayList<int[]> positions = new ArrayList<int[]>(); // x, y
+                ArrayList<int[]> positions = new ArrayList<int[]>();
                 for(int i = 0; i < brickToGrid.length; i++) {
                     for(int j = 0; j < brickToGrid[0].length; j++) {
                         brickToGridTurned[i][j] = brickToGrid[j][brickToGrid.length - 1 - i];
@@ -232,8 +247,10 @@ public class Game {
                     }
                 }
                 for(int i = 0; i < this.pixels.length; i++) {
-                    this.pixels[i].setPosition(positions.get(i)[0] + this.dx, positions.get(i)[1] + this.dy);
+                    this.pixels[i].setPosition(positions.get(i)[0] + this.dx + newXOffset, positions.get(i)[1] + this.dy + newYOffset);
                 }
+                this.dx += newXOffset;
+                this.dy += newYOffset;
             }
         }
 

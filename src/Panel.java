@@ -15,7 +15,7 @@ public class Panel extends JPanel implements ActionListener {
 	static final int DELAY = 0;
 	Timer timer;
 
-	// GUI data
+	/* GUI data */
 
 	// Hash map for Square enum and actual Color
 	private static HashMap<Game.PixelColor, Color> gridColors = new HashMap<Game.PixelColor, Color>();
@@ -23,6 +23,11 @@ public class Panel extends JPanel implements ActionListener {
 	// Size of each cell in the grid
 	static int gridSquareSize = 30;
 	static int gridXOffsetToMid = SCREEN_WIDTH/2; // The exact position where the grid will appear in the center of the screen
+
+	static boolean bricksGlow = true; // Faint glow will be removed from bricks if set to false
+	static int glowStrength = 10; // The distance by which the brick glow will spread
+	static int glowIntensity = 50; // The intensity of the brick glow (0 - 255)
+	static boolean drawPixelOutline = false; // When true, an outline will be drawn marking individual cells on the grid
 
 	// Constructor
 	// Initializes the Panel
@@ -36,7 +41,7 @@ public class Panel extends JPanel implements ActionListener {
 
 		// Pixel colors are represented with an enum in the main class
 		// We use this to assign appropriate color values to each enum variable
-		gridColors.put(Game.PixelColor.NONE, new Color(25, 25, 25));
+		gridColors.put(Game.PixelColor.NONE, new Color(20, 20, 20));
 		gridColors.put(Game.PixelColor.PINK, new Color(255, 0, 240));
 		gridColors.put(Game.PixelColor.BLUE, new Color(0, 230, 255));
 		gridColors.put(Game.PixelColor.YELLOW, new Color(255, 220, 50));
@@ -50,7 +55,8 @@ public class Panel extends JPanel implements ActionListener {
 	}
 	
 	public void draw(Graphics g) {
-        drawTetrisGrid(gridXOffsetToMid - (gridSquareSize * Game.grid[0].length / 2), 50, gridSquareSize, g);
+        //drawTetrisGrid(gridXOffsetToMid - (gridSquareSize * Game.grid[0].length / 2), 50, gridSquareSize, g);
+		drawTetrisGrid(gridXOffsetToMid - (gridSquareSize * Game.gridWidth / 2), 50, gridSquareSize, g);
 	}
 	
 	@Override
@@ -62,24 +68,32 @@ public class Panel extends JPanel implements ActionListener {
 
 	// Draws the tetris grid
 	public static void drawTetrisGrid(int xOffset, int yOffset, int squareSize, Graphics g) {
-		for(int i = 0; i < Game.grid.length; i++) {
-			for(int j = 0; j < Game.grid[0].length; j++) {
-				// Square
-				g.setColor(gridColors.get(Game.grid[i][j]));
-				g.fillRect(j * squareSize + xOffset, i * squareSize + yOffset, squareSize, squareSize);
+		// Draw empty grid cells
+		g.setColor(gridColors.get(Game.PixelColor.NONE));
+		g.fillRect(xOffset, yOffset, squareSize * Game.gridWidth, squareSize * Game.gridHeight);
 
-				// Outline
-				g.setColor(Color.BLACK);
-				g.drawRect(j * squareSize + xOffset, i * squareSize + yOffset, squareSize, squareSize);
+		// Draw colored pixels
+		for(Game.Pixel pixel : Game.pixelList) {
+			// Square
+			g.setColor(gridColors.get(pixel.pixelColor));
+			g.fillRect(pixel.getX() * squareSize + xOffset, pixel.getY() * squareSize + yOffset, squareSize, squareSize);
 
-				// Glow
-				int glowStrength = 10;
-				g.setColor(new Color(gridColors.get(Game.grid[i][j]).getRed(),
-						   gridColors.get(Game.grid[i][j]).getGreen(),
-						   gridColors.get(Game.grid[i][j]).getBlue(),
-						   50));
-				g.fillRect(j * squareSize + xOffset - glowStrength/2, i * squareSize + yOffset + 1 - glowStrength/2, squareSize + glowStrength, squareSize + glowStrength);
+			// Glow and behold
+			if(bricksGlow) {
+				g.setColor(new Color(gridColors.get(pixel.pixelColor).getRed(),
+									 gridColors.get(pixel.pixelColor).getGreen(),
+									 gridColors.get(pixel.pixelColor).getBlue(),
+									 glowIntensity));
+				g.fillRect(pixel.getX() * squareSize + xOffset - glowStrength/2, pixel.getY() * squareSize + yOffset + 1 - glowStrength/2, squareSize + glowStrength, squareSize + glowStrength);
 			}
+		}
+
+		// Draw outline
+		if(drawPixelOutline) {
+			g.setColor(Color.BLACK);
+			for(int i = 0; i < Game.gridHeight; i++)
+				for(int j = 0; j < Game.gridWidth; j++)
+					g.drawRect(j * squareSize + xOffset, i * squareSize + yOffset, squareSize, squareSize);
 		}
 	}
 
@@ -101,9 +115,15 @@ public class Panel extends JPanel implements ActionListener {
 					Game.bricks.get(i).left();
 				}
 				break;
-			case KeyEvent.VK_DOWN:
+			case KeyEvent.VK_D:
 				for(int i = 0; i < Game.bricks.size(); i++) {
 					Game.bricks.get(i).rotate();
+				}
+				break;
+			case KeyEvent.VK_A:
+				for(int i = 0; i < Game.bricks.size(); i++) {
+					for(int j = 0; j < 3; j++)
+						Game.bricks.get(i).rotate();
 				}
 				break;
 			}
