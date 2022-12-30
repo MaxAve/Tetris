@@ -1,18 +1,17 @@
 import javax.swing.JFrame;
 import java.awt.Toolkit;
 
-@SuppressWarnings("serial")
 public class Frame extends JFrame {
     // Frame constructor
 	public Frame() {
 		this.add(new Panel());
-		this.setTitle("Tris");
+		this.setTitle("Tetris");
 		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		this.setResizable(true);
 		this.pack();
 		this.setVisible(true);
 		this.setLocationRelativeTo(null);
-        //this.setIcon(""); // TODO get a cool icon (save icon at Images folder)
+        this.setIcon("Images/tetris_logo.png");
 	}
 
     // Attempts to set the icon of the frame to a predefined image

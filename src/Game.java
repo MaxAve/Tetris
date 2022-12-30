@@ -3,39 +3,52 @@ import java.lang.Thread;
 import java.util.Random;
 
 public class Game {
-    public static int gridWidth, gridHeight;
-    //public static PixelColor[][] grid; // The game is represented by a grid of a certain size
+    public static final int MAX_GRID_WIDTH = 80;
+    public static final int MAX_GRID_HEIGHT = 40;
+    public static int gridWidth;
+    public static int gridHeight;
+
     public static enum PixelColor {NONE, PINK, BLUE, YELLOW, GREEN, RED} // Pixel color enum
+
     public static ArrayList<Brick> bricks = new ArrayList<>();
     public static ArrayList<Pixel> pixelList = new ArrayList<>();
+
     public static boolean running = true;
-    public static final long fastFallUpdateDelay = 20;
+    public static final long MAX_FALL_UPDATE_DELAY = 700;
+    public static final long MIN_FALL_UPDATE_DELAY = 100;
     public static long fallUpdateDelay = 500;
     private static Random random = new Random();
+
     public static boolean fastMode = false; // Fast mode
+    public static long score = 0;
+
+    public static int difficulty;
 
     // Main
     public static void main(String[] args) {
         initGrid(16, 30);
-        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
+
+        // Send first brick
         newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
 
+        // Initialize new brick update thread
         BrickFallUpdate t = new BrickFallUpdate();
         t.start();
+
+        difficulty = calculateDifficulty(); // Calculate game difficulty
+        System.out.println("Starting new game with difficulty " + difficulty);
 
         new Frame(); // Initialize new JFrame
     }
 
+    public static int calculateDifficulty() {
+        return (int)((((MAX_GRID_HEIGHT + 1 - gridHeight) * gridWidth) * ((int)MAX_FALL_UPDATE_DELAY + 1 - (int)fallUpdateDelay) / 100) / 100);
+    }
+
     // Initializes the grid
     public static void initGrid(int width, int height) {
-        gridWidth = width;
-        gridHeight = height;
-        /*grid = new PixelColor[height][width];
-        for(int i = 0; i < height; i++) {
-            for(int j = 0; j < width; j++) {
-                grid[i][j] = PixelColor.NONE;
-            }
-        }*/
+        gridWidth = width <= MAX_GRID_WIDTH ? width : MAX_GRID_WIDTH;
+        gridHeight = height <= MAX_GRID_HEIGHT ? height : MAX_GRID_HEIGHT;
     }
 
     // Returns a new brick instance
@@ -48,10 +61,80 @@ public class Game {
         for(int i = 0; i < brickStructure.length; i++) {
             brickStructure[i].brickID = pixelBrickID;
         }
-        Brick b = new Brick(brickStructure, brickID);
+        Brick b = new Brick(brickStructure, brickID, brickID != 1);
         b.dx = x;
         b.dy = y;
         return b;
+    }
+
+    // Checks if there are any lines, if there are, it removes those lines
+    public static void removeLines() {
+        /*
+        Here we convert the 1-dimensional ArrayList of pixels into one 2D Array
+        Is this an overcomplication? An oversimplification? Who knows, I just know that it works...
+        */
+        int[][] pixelListToGrid = new int[gridHeight][gridWidth]; // Indices of the pixels
+        for(int i = 0; i < gridHeight; i++) {
+            for(int j = 0; j < gridWidth; j++) {
+                pixelListToGrid[i][j] = -1;
+            }
+        }
+        for(int i = 0; i < pixelList.size(); i++) {
+            pixelListToGrid[pixelList.get(i).getY()][pixelList.get(i).getX()] = i;
+        }
+
+        /*
+        Check if there are any lines, if so, then the line will be removed
+        */
+        int linesRemoved = 0;
+        int lowestLineRemoved = -2147483647;
+        for(int i = 0; i < gridHeight; i++) {
+            boolean lineFull = true;
+            for(int j = 0; j < gridWidth; j++) {
+                if(pixelListToGrid[i][j] < 0) {
+                    lineFull = false;
+                }
+            }
+            if(lineFull) {
+                if(i > lowestLineRemoved) {
+                    lowestLineRemoved = i;
+                }
+                linesRemoved++;
+                // Remove the line
+                for(int j = 0; j < gridWidth; j++) {
+                    if(pixelListToGrid[i][j] >= 0) {
+                        try {
+                            int indexToRemove = pixelListToGrid[i][j];
+                            pixelList.remove(indexToRemove);
+
+                            // When we remove an object from an ArrayList, all indicex AFTER the removed index get shifted by -1
+                            // We need to reflect this change on the 2D array in order to avoid IndexOutOfBoundsExceptions
+                            for(int a = 0; a < gridHeight; a++) {
+                                for(int b = 0; b < gridWidth; b++) {
+                                    if(pixelListToGrid[a][b] >= indexToRemove) {
+                                        pixelListToGrid[a][b]--;
+                                    }
+                                }
+                            }
+                        } catch(Exception e) {
+                            System.err.println(e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Shift all remaining pixels downwards by 1 unit
+        for(int a = 0; a < linesRemoved; a++) {
+            // Give points
+            score += Math.pow(difficulty, 2);
+
+            for(int b = 0; b < pixelList.size(); b++) {
+                if(pixelList.get(b).getY() < lowestLineRemoved) {
+                    pixelList.get(b).shiftPosition(0, 1);
+                }
+            }
+        }
     }
 
     /* Individual pixel */
@@ -93,13 +176,8 @@ public class Game {
 
         // Set position
         public void setPosition(int newX, int newY) {
-            //// The grid is only a graphical representation. Updating Pixel objects will not affect the grid
-            //// Therefore, we need to manually clear out or draw new pixels on the grid
-            //// This part clears out the pixel at the old position
-            //grid[this.y][this.x] = PixelColor.NONE;
             this.x = newX;
             this.y = newY;
-            //grid[this.y][this.x] = this.pixelColor; // Same story as above, but draws a new pixel at the new position
         }
 
         /* Utility methods */
@@ -116,15 +194,17 @@ public class Game {
     public static class Brick {
         public Pixel[] pixels; // Container for all pixels which make up the brick
         public boolean falling;
+        public boolean rotatable;
         public int angle = 0;
         public int dx, dy;
         public int modelID;
 
         // Constructor
-        public Brick(Pixel[] pixels, int ID) {
+        public Brick(Pixel[] pixels, int ID, boolean rotatable) {
             this.pixels = pixels;
             this.falling = true;
             this.modelID = ID;
+            this.rotatable = rotatable;
             bricks.add(this);
         }
 
@@ -219,7 +299,7 @@ public class Game {
         // Rotates the brick 90 degrees clockwise
         // Dont ask me how/why it works, I have as much a clue as you
         public void rotate() {
-            if(this.falling) {
+            if(this.falling && this.rotatable) {
                 this.angle++;
                 if(this.angle > 3)
                     this.angle = 0;
@@ -298,10 +378,11 @@ public class Game {
                     if(Game.bricks.get(i).falling) {
                         Game.bricks.get(i).fall();
                         try {
-                            sleep(!fastMode ? fallUpdateDelay : fastFallUpdateDelay);
+                            sleep(fallUpdateDelay);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
+                        Game.removeLines();
                     }
                 }
             }
