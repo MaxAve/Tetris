@@ -3,44 +3,109 @@ import java.lang.Thread;
 import java.util.Random;
 
 public class Game {
+    // Grid size limits
     public static final int MAX_GRID_WIDTH = 80;
     public static final int MAX_GRID_HEIGHT = 40;
+
+    // Grid dimensions
     public static int gridWidth;
     public static int gridHeight;
 
-    public static enum PixelColor {NONE, PINK, BLUE, YELLOW, GREEN, RED} // Pixel color enum
+    // Selected grid dimensions in the menu
+    public static int selectedGridWidth;
+    public static int selectedGridHeight;
 
+    public static enum PixelColor {NONE, PINK, BLUE, YELLOW, GREEN, RED}
+    public static enum Difficulty {EASY, MEDIUM, HARD, EXTREME, CUSTOM}
+
+    // Containers for object instances
     public static ArrayList<Brick> bricks = new ArrayList<>();
-    public static ArrayList<Pixel> pixelList = new ArrayList<>();
+    public static ArrayList<Pixel> pixelList = new ArrayList<>(); // Pixel objects can be owned by both this ArrayList and by a Brick instance
 
     public static boolean running = true;
-    public static final long MAX_FALL_UPDATE_DELAY = 700;
-    public static final long MIN_FALL_UPDATE_DELAY = 100;
-    public static long fallUpdateDelay = 500;
-    private static Random random = new Random();
+    public static boolean paused = false;
 
-    public static boolean fastMode = false; // Fast mode
+    // "Fall update" refers to the pause time taken by the thread to call the fall() method on falling Brick instances
+    public static final long MAX_FALL_UPDATE_DELAY = 700; // Max bound
+    public static final long MIN_FALL_UPDATE_DELAY = 100; // Min bound
+    public static long fallUpdateDelay;
+    public static long selectedFallUpdateDelay;
+
     public static long score = 0;
+    public static Difficulty selectedDifficulty = Difficulty.EASY; // Selected difficulty
+    public static int difficulty; // Calculated difficulty (is used to calculate score on CUSTOM difficulty)
 
-    public static int difficulty;
+    // Misc
+    public static boolean gameOverPending = false; // When true, it will tell the program to wait until SPACE is pressed to exit the game
+    private static Random random = new Random();
 
     // Main
     public static void main(String[] args) {
-        initGrid(16, 30);
+        // Default difficulty
+        // TODO remove once menu GUI is finished
+        selectedDifficulty = Difficulty.HARD;
 
-        // Send first brick
-        newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
+        startNewGame(selectedDifficulty);
 
-        // Initialize new brick update thread
-        BrickFallUpdate t = new BrickFallUpdate();
-        t.start();
-
-        difficulty = calculateDifficulty(); // Calculate game difficulty
-        System.out.println("Starting new game with difficulty " + difficulty);
-
-        new Frame(); // Initialize new JFrame
+        new Frame(); // Initialize new JFrame (creates window)
     }
 
+    public static void startNewGame(Difficulty d) {
+        Panel.currentScreenPage = Panel.ScreenPage.GAME;
+
+        int newGridWidth = 0;
+        int newGridHeight = 0;
+        long newFallUpdateDelay = 0;
+
+        // Initialize grid
+        if(d == Difficulty.EASY) {
+            newGridWidth = 16;
+            newGridHeight = 30;
+            newFallUpdateDelay = 500;
+        } else if(d == Difficulty.MEDIUM) {
+            newGridWidth = 16;
+            newGridHeight = 30;
+            newFallUpdateDelay = 350;
+        } else if(d == Difficulty.HARD) {
+            newGridWidth = 16;
+            newGridHeight = 30;
+            newFallUpdateDelay = 220;
+        } else if(d == Difficulty.EXTREME) {
+            newGridWidth = 16;
+            newGridHeight = 30;
+            newFallUpdateDelay = 100;
+        } else if(d == Difficulty.CUSTOM) {
+            newGridWidth = selectedGridWidth;
+            newGridHeight = selectedGridHeight;
+            newFallUpdateDelay = selectedFallUpdateDelay;
+            difficulty = calculateDifficulty(); // Calculate game difficulty
+            System.out.println("Starting new custom game with difficulty " + difficulty);
+        }
+
+        initGrid(newGridWidth, newGridHeight);
+        newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
+        fallUpdateDelay = newFallUpdateDelay;
+        running = true;
+        BrickFallUpdate t = new BrickFallUpdate();
+        t.start();
+    }
+
+    public static void gameOver() {
+        gameOverPending = true;
+    }
+
+    public static void endCurrentGame() {
+        // Clear out object instance containers
+        bricks.clear();
+        pixelList.clear();
+
+        running = false;
+        gameOverPending = false;
+        Panel.currentScreenPage = Panel.ScreenPage.MAIN_MENU; // Go to main menu
+    }
+
+    // Calculates difficulty using an unneccesarily complicated formula based on certain game
+    // factors such as grid size and brick fall speed.
     public static int calculateDifficulty() {
         return (int)((((MAX_GRID_HEIGHT + 1 - gridHeight) * gridWidth) * ((int)MAX_FALL_UPDATE_DELAY + 1 - (int)fallUpdateDelay) / 100) / 100);
     }
@@ -87,7 +152,7 @@ public class Game {
         Check if there are any lines, if so, then the line will be removed
         */
         int linesRemoved = 0;
-        int lowestLineRemoved = -2147483647;
+        int lowestLineRemoved = -2147483647; // We need to know where the line NEAREST TO THE BOTTOM was removed so that we know which pixels to shift and which not to
         for(int i = 0; i < gridHeight; i++) {
             boolean lineFull = true;
             for(int j = 0; j < gridWidth; j++) {
@@ -126,8 +191,10 @@ public class Game {
 
         // Shift all remaining pixels downwards by 1 unit
         for(int a = 0; a < linesRemoved; a++) {
-            // Give points
-            score += Math.pow(difficulty, 2);
+            // Give points based on difficulty (custom selected difficulty)
+            // In CUSTOM difficulty, a fixed number of points is incremented by difficulty^2
+            if(selectedDifficulty == Difficulty.CUSTOM)
+                score += Math.pow(difficulty, 2);
 
             for(int b = 0; b < pixelList.size(); b++) {
                 if(pixelList.get(b).getY() < lowestLineRemoved) {
@@ -135,6 +202,11 @@ public class Game {
                 }
             }
         }
+
+        // Give points based on line combo
+        // On difficulties EASY to EXTREME, score is incremented by (number of lines removed in the last update)^3,
+        // that is, if 1 line is removed, the player gets 1 point, if 2 lines are removed, they get 8 points, if 3 then 27, and so on.
+        score += Math.pow(linesRemoved, 3);
     }
 
     /* Individual pixel */
@@ -216,30 +288,25 @@ public class Game {
 
         // Checks whether any pixels have collided with the ground or other bricks
         // If so, then this.falling is set to false
-        public void checkCollisions() {
+        public boolean checkCollisions() {
             for(int i = 0; i < this.pixels.length; i++) {
                 if(this.pixels[i].active) {
                     // Check if a pixel is touching the ground
-                    //if(this.pixels[i].getY() >= grid.length-1) {
                     if(this.pixels[i].getY() >= gridHeight-1) {
                         this.falling = false;
-                        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
                         newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
                         this.deactivate();
+                        return true;
                     } else {
                         // Check if any pixels are colliding with this pixel
-                        // Because of the horrible implementation, we need to check the coordinates AND 2 IDs
                         for(int j = 0; j < pixelList.size(); j++) {
-                            // Check if the pixel is under this one
                             if(pixelList.get(j).getY() == this.pixels[i].getY()+1 && pixelList.get(j).getX() == this.pixels[i].getX()) {
-                                // Check if the pixel IDs DO NOT match
                                 if(!pixelList.get(j).ID.equals(this.pixels[i].ID)) {
-                                    // Check if the pixel brick IDs DO NOT match
                                     if(!pixelList.get(j).brickID.equals(this.pixels[i].brickID)) {
                                         this.falling = false;
-                                        //newBrick(random.nextInt(5), random.nextInt(grid[0].length-4), 0);
                                         newBrick(random.nextInt(5), random.nextInt(gridWidth-4), 0);
                                         this.deactivate();
+                                        return true;
                                     }
                                 }
                             }
@@ -247,6 +314,7 @@ public class Game {
                     }
                 }
             }
+            return false;
         }
 
         // Checks if there is free space to the right of the brick
@@ -334,9 +402,19 @@ public class Game {
             }
         }
 
+        public void up() {
+            if(this.falling) {
+                for(int i = 0; i < this.pixels.length; i++) {
+                    pixels[i].shiftPosition(0, -1);
+                }
+                this.dy--;
+            }
+        }
+
         // Makes the brick fall down by 1 pixel
         public void fall() {
-            checkCollisions();
+            boolean brickFallen = checkCollisions();
+            if(brickFallen) removeLines();
             if(this.falling) {
                 for(int i = pixels.length-1; i >= 0; i--) {
                     pixels[i].shiftPosition(0, 1);
@@ -377,12 +455,14 @@ public class Game {
                 for(int i = 0; i < Game.bricks.size(); i++) {
                     if(Game.bricks.get(i).falling) {
                         Game.bricks.get(i).fall();
+                        // Cancel fall if game is paused
+                        if(paused)
+                            Game.bricks.get(i).up();
                         try {
                             sleep(fallUpdateDelay);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
-                        Game.removeLines();
                     }
                 }
             }

@@ -10,10 +10,12 @@ public class Panel extends JPanel implements ActionListener {
 	static final int SCREEN_WIDTH = (int)screenSize.getWidth();
 	static final int SCREEN_HEIGHT = (int)screenSize.getHeight();
 
-    // Timer
 	Timer timer;
 
-	/* GUI data */
+	/* GUI stuff */
+
+	public static enum ScreenPage {MAIN_MENU, GAME_SETTINGS_MENU, GAME}
+	public static ScreenPage currentScreenPage = ScreenPage.GAME;
 
 	// Hash map for Square enum and actual Color
 	private static HashMap<Game.PixelColor, Color> gridColors = new HashMap<Game.PixelColor, Color>();
@@ -25,7 +27,20 @@ public class Panel extends JPanel implements ActionListener {
 	static boolean bricksGlow = true; // Faint glow will be removed from bricks if set to false
 	static int glowStrength = 10; // The distance by which the brick glow will spread
 	static int glowIntensity = 50; // The intensity of the brick glow (0 - 255)
-	static boolean drawPixelOutline = true; // When true, an outline will be drawn marking individual cells on the grid
+	static boolean drawPixelOutline = false; // When true, an outline will be drawn marking individual cells on the grid
+
+	// We want to warn the player that they are about to exit during a game session
+	// When set to 0, nothing happens
+	// When set to 1, a warning is displayed on the screen to confirm that they want to leave
+	// When set to 2, the game can be left with no warning
+	// This is used to create a confirmation for player leave
+	public static byte gameExitLevel = 0;
+
+	/* GUI Components */
+
+	public static GUIComponent.MessageBox exitWarnMessageBox = new GUIComponent.MessageBox(420, 150, new String[]{"Are you sure you want to exit? Press ESC again to",
+																													   "confirm. Your score will be automatically saved.",
+																													   "Press the X on the top-right to continue playing."}, "Exit game?");
 
 	// Constructor
 	// Initializes the Panel
@@ -37,6 +52,8 @@ public class Panel extends JPanel implements ActionListener {
 		timer = new Timer(0, this);
 		timer.start();
 		
+		exitWarnMessageBox.setPositionCenter();
+
 		// Initialize new sin wave counter
 		SineWaveCounterUpdater sineCounter = new SineWaveCounterUpdater(0.1, 40);
 		sineCounter.start();
@@ -57,16 +74,39 @@ public class Panel extends JPanel implements ActionListener {
 	}
 	
 	public void draw(Graphics g) {
-		// Score display
-		g.setColor(new Color(255, 255, 255, (int)(Math.sin(SineWaveCounterUpdater.counter) * 50 + 185)));
-		g.setFont(new Font(null, Font.BOLD, 28));
-		g.drawString("SCORE: " + Game.score, 30, 50);
+		if(currentScreenPage == ScreenPage.GAME) {
+			// Score display
+			g.setColor(new Color(255, 255, 255, (int)(Math.sin(SineWaveCounterUpdater.counter) * 50 + 185)));
+			g.setFont(new Font(null, Font.BOLD, 28));
+			g.drawString("SCORE: " + Game.score, 30, 50);
 
-		drawTetrisGrid(gridXOffsetToMid - (gridSquareSize * Game.gridWidth / 2), 50, gridSquareSize, g);
+			drawTetrisGrid(gridXOffsetToMid - (gridSquareSize * Game.gridWidth / 2), 50, gridSquareSize, g);
+
+			// Paused
+			if(Game.paused) {
+				g.setColor(new Color(0, 0, 0, 100));
+				g.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+				g.setColor(Color.WHITE);
+				g.setFont(new Font(null, Font.BOLD, 50));
+				g.drawString("PAUSED", SCREEN_WIDTH/2 - 100, SCREEN_HEIGHT/2 - 50);
+				
+				g.setFont(new Font(null, Font.PLAIN, 20));
+				g.drawString("Press P to resume", SCREEN_WIDTH/2 - 80, SCREEN_HEIGHT/2);
+			}
+
+			// Game exit warn message box
+			if(gameExitLevel == 1) {
+				exitWarnMessageBox.draw(g);
+			}
+		}
 	}
 	
 	@Override
 	public void actionPerformed(ActionEvent e) {
+		exitWarnMessageBox.onClickX(()->{
+			gameExitLevel = 0;
+		});
 		repaint();
 	}
 	
@@ -88,9 +128,9 @@ public class Panel extends JPanel implements ActionListener {
 				// Glow and behold
 				if(bricksGlow) {
 					g.setColor(new Color(gridColors.get(pixel.pixelColor).getRed(),
-										gridColors.get(pixel.pixelColor).getGreen(),
-										gridColors.get(pixel.pixelColor).getBlue(),
-										glowIntensity));
+										 gridColors.get(pixel.pixelColor).getGreen(),
+									 	 gridColors.get(pixel.pixelColor).getBlue(),
+										 glowIntensity));
 					g.fillRect(pixel.getX() * squareSize + xOffset - glowStrength/2, pixel.getY() * squareSize + yOffset + 1 - glowStrength/2, squareSize + glowStrength, squareSize + glowStrength);
 				}
 			}
@@ -169,6 +209,27 @@ public class Panel extends JPanel implements ActionListener {
 				for(int i = 0; i < Game.bricks.size(); i++) {
 					for(int j = 0; j < 3; j++)
 						Game.bricks.get(i).rotate();
+				}
+				break;
+			case KeyEvent.VK_ESCAPE:
+				exitWarnMessageBox.show();
+				gameExitLevel++;
+				if(gameExitLevel == 2) {
+					Game.endCurrentGame();
+					exitWarnMessageBox.hide();
+					gameExitLevel = 0;
+				}
+				break;
+			case KeyEvent.VK_SPACE:
+				gameExitLevel = 0;
+				GUIComponent.closeAllmessageBoxes();
+				if(Game.gameOverPending) {
+					Game.endCurrentGame();
+				}
+				break;
+			case KeyEvent.VK_P:
+				if(!Game.gameOverPending) {
+					Game.paused = !Game.paused;
 				}
 				break;
 			}
